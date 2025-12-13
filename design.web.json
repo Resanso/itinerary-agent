@@ -1,0 +1,88 @@
+{
+    "project_context": {
+      "app_name": "Itinerary Agent",
+      "description": "Platform perencanaan perjalanan cerdas yang berfokus pada pariwisata berkelanjutan (sustainable travel).",
+      "target_audience": "Eco-conscious travelers, Gen Z, Digital Nomads",
+      "vibe_keywords": ["Eco-friendly", "Modern", "Clean", "Serene", "Intuitive"]
+    },
+    "tech_stack": {
+      "framework": "React (Vite)",
+      "styling": "Tailwind CSS",
+      "icons": "Lucide React (rekomendasi: Leaf, MapPin, Calendar, Info)",
+      "maps": "Leaflet / React-Leaflet (untuk peta di kanan)",
+      "font_provider": "Google Fonts"
+    },
+    "design_system": {
+      "color_palette": {
+        "primary": "#42C296", 
+        "primary_hover": "#36A980",
+        "secondary": "#E6F7F0", 
+        "background_main": "#F8F9FA",
+        "background_card": "#FFFFFF",
+        "text_primary": "#1F2937",
+        "text_secondary": "#6B7280",
+        "accent_success": "#D1FAE5", 
+        "accent_error": "#FEE2E2", 
+        "accent_warning": "#FEF3C7",
+        "status_green_text": "#065F46",
+        "status_red_text": "#991B1B"
+      },
+      "typography": {
+        "font_family_heading": "Poppins, sans-serif",
+        "font_family_body": "Inter, sans-serif",
+        "weights": {
+          "regular": 400,
+          "medium": 500,
+          "semibold": 600,
+          "bold": 700
+        }
+      },
+      "ui_rules": {
+        "border_radius": {
+          "button": "9999px (Full Rounded / Pill Shape)",
+          "card": "16px (Rounded-xl)",
+          "input": "9999px (Full Rounded / Pill Shape)"
+        },
+        "box_shadow": "0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) (Soft & Clean)",
+        "spacing": "Relaxed padding, clean whitespace"
+      },
+      "components_style": {
+        "buttons": "Solid primary color, white text, pill shape. Secondary buttons are outlined.",
+        "inputs": "White background, soft gray border, pill shape icon on left.",
+        "cards": "White background, soft shadow, rounded corners. Active state has green border."
+      }
+    },
+    "layout_structure": [
+      {
+        "page_name": "Landing Page",
+        "type": "Single Column",
+        "sections": [
+          "Navbar (Logo Left, Links Center, CTA Button Right)",
+          "Hero Section (Full width background image, Centered Text, CTA Button)",
+          "Features Section (3 Grid Cards: AI, Eco-Certified, Carbon Tracking)"
+        ]
+      },
+      {
+        "page_name": "Create Itinerary",
+        "type": "Centered Form",
+        "elements": [
+          "Search Input (Pill shape)",
+          "Dropdown (Days)",
+          "Selection Cards (Travel Pace: Relaxed/Moderate/Fast)",
+          "Interest Chips (Nature, Culinary, Culture, etc.)",
+          "Toggle Switch (Prioritize Sustainability)",
+          "Generate Button (Large, Full Width)"
+        ]
+      },
+      {
+        "page_name": "Itinerary Result",
+        "type": "Split View (Desktop)",
+        "layout_rules": "Left Sidebar (40%) scrollable for Timeline. Right Side (60%) fixed for Map.",
+        "features": [
+          "Day Accordion (Expandable details)",
+          "Etiquette Cards (Do/Don't/Warning blocks)",
+          "Map Markers (Custom Eco-Icons)"
+        ]
+      }
+    ]
+  }
