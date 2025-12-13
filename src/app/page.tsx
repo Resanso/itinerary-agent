@@ -1,15 +1,14 @@
-'use client';
-
-import dynamic from 'next/dynamic';
-
-const MapsPlanner = dynamic(() => import("@/components/MapsPlanner"), {
-  ssr: false,
-});
+import HeroSection from '@/components/landing/HeroSection';
+import FeaturesGrid from '@/components/landing/FeaturesGrid';
+import SustainabilityBadge from '@/components/landing/SustainabilityBadge';
 
 export default function Home() {
   return (
-    <main>
-      <MapsPlanner />
+    <main className="min-h-screen">
+      <HeroSection />
+      <div className="my-20" />
+      <FeaturesGrid />
+      <SustainabilityBadge />
     </main>
   );
 }

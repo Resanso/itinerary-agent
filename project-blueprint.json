@@ -1,0 +1,199 @@
+{
+    "project_meta": {
+      "app_name": "Itinerary Agent",
+      "version": "1.0.0 (MVP)",
+      "description": "Sustainable Travel Itinerary Planner dengan logika Rule-Based dan integrasi Peta.",
+      "tech_stack": {
+        "core": "React (Vite) + JavaScript",
+        "styling": "Tailwind CSS",
+        "icons": "Lucide React",
+        "maps": "React Leaflet + Leaflet CSS",
+        "drag_drop": "@dnd-kit/core (atau react-beautiful-dnd)",
+        "animation": "Framer Motion + GSAP",
+        "state_management": "React Context API + LocalStorage"
+      }
+    },
+    "design_system": {
+      "colors": {
+        "primary": "#42C296",
+        "primary_hover": "#36A980",
+        "secondary": "#E6F7F0",
+        "accent_teal": "#0D9488",
+        "bg_glass": "rgba(255, 255, 255, 0.7)",
+        "text_main": "#1F2937",
+        "text_muted": "#6B7280",
+        "success": "#10B981",
+        "warning": "#F59E0B",
+        "danger": "#EF4444"
+      },
+      "shapes": {
+        "button": "9999px (Pill Shape)",
+        "card": "24px (Rounded-3xl)",
+        "input": "16px (Rounded-xl) atau Pill"
+      },
+      "effects": {
+        "glassmorphism": "backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.3); box-shadow: 0 4px 30px rgba(0,0,0,0.05);",
+        "hover_lift": "transform: translateY(-4px); transition: all 0.3s ease;",
+        "glow": "box-shadow: 0 0 15px rgba(66, 194, 150, 0.4);"
+      },
+      "typography": {
+        "font_heading": "Poppins, sans-serif",
+        "font_body": "Inter, sans-serif"
+      }
+    },
+    "navigation_structure": {
+      "navbar": [
+        { "label": "Home", "path": "/" },
+        { "label": "Create", "path": "/create" },
+        { "label": "Tips", "path": "/tips" },
+        { "label": "Etiquette", "path": "/etiquette" },
+        { "label": "Saved", "path": "/saved" }
+      ]
+    },
+    "pages_detail": {
+      "landing_page": {
+        "route": "/",
+        "components": [
+          {
+            "name": "HeroSection",
+            "elements": {
+              "headline": "Plan Your Trip, Sustainably.",
+              "subtext": "Create smart, eco-conscious travel itineraries effortlessly.",
+              "cta_button": { "label": "Create Itinerary", "action": "Navigate to /create", "style": "Primary Green, Glow Effect" },
+              "background": "High-quality nature image with overlay"
+            }
+          },
+          {
+            "name": "FeaturesGrid",
+            "layout": "3 Columns",
+            "items": [
+              { "icon": "Sparkles", "title": "Auto Itinerary", "desc": "Smart time-blocking generator" },
+              { "icon": "Leaf", "title": "Eco Etiquette", "desc": "Local do's and don'ts" },
+              { "icon": "Map", "title": "Interactive Map", "desc": "Visual route planning" }
+            ]
+          },
+          {
+            "name": "SustainabilityBadge",
+            "content": "Supporting SDG 8 & 11",
+            "style": "Small card, earthy tones"
+          }
+        ]
+      },
+      "create_itinerary_page": {
+        "route": "/create",
+        "style": "Centered Glassmorphism Card",
+        "form_fields": [
+          {
+            "name": "city",
+            "type": "Autocomplete Dropdown",
+            "options": ["Bali", "Bandung", "Yogyakarta"],
+            "validation": "Required"
+          },
+          {
+            "name": "days",
+            "type": "Number Input",
+            "min": 1,
+            "max": 10,
+            "validation": "Required, > 0"
+          },
+          {
+            "name": "pace",
+            "type": "Segmented Control",
+            "options": ["Relaxed", "Moderate", "Fast-Paced"],
+            "default": "Moderate"
+          },
+          {
+            "name": "interests",
+            "type": "Multi-select Chips",
+            "options": ["Nature", "Culinary", "Culture", "History", "Hidden Gem"]
+          },
+          {
+            "name": "eco_focus",
+            "type": "Toggle Switch",
+            "label": "Prioritize sustainability?"
+          }
+        ],
+        "actions": {
+          "generate_btn": {
+            "label": "Generate Itinerary",
+            "behavior": "Show Loading Spinner -> Wait 2s (Mock API) -> Redirect to /result"
+          }
+        }
+      },
+      "result_page": {
+        "route": "/result",
+        "layout": "Split View (Desktop: Left List 40%, Right Map 60%)",
+        "state_management": {
+          "itinerary_data": "Array of Days, each containing Array of Places",
+          "map_center": "Dynamic based on City"
+        },
+        "components": {
+          "sidebar_left": {
+            "header": "Trip Summary (City, Days, Pace)",
+            "content": "Accordion per Day",
+            "card_item": {
+              "elements": ["Thumbnail", "Place Name", "Time Slot", "Duration Badge", "Category Icon"],
+              "interactions": [
+                "Drag handle (Reorder)",
+                "Remove button (Trash Icon)",
+                "Click to center map"
+              ]
+            },
+            "add_button": "Open Recommendations Modal"
+          },
+          "map_panel_right": {
+            "library": "React Leaflet",
+            "features": [
+              "Custom Markers (Green Leaf Pin)",
+              "Polyline connecting daily route",
+              "Popup with Place Info"
+            ]
+          }
+        },
+        "modals": {
+          "recommendation_panel": {
+            "trigger": "Add Destination Button",
+            "content": "List of curated places filtered by category",
+            "action": "Add to current day -> Update Map & List"
+          },
+          "share_modal": {
+            "trigger": "Share Button",
+            "content": "Text summary of trip",
+            "action": "Copy to Clipboard"
+          }
+        }
+      },
+      "etiquette_page": {
+        "route": "/etiquette",
+        "query_param": "?city=SelectedCity",
+        "layout": "Grid of Cards",
+        "content_structure": {
+          "do": { "color": "Green-50", "icon": "CheckCircle" },
+          "dont": { "color": "Red-50", "icon": "XCircle" },
+          "warning": { "color": "Yellow-50", "icon": "AlertTriangle" }
+        }
+      },
+      "tips_page": {
+        "route": "/tips",
+        "layout": "Masonry or Grid",
+        "card_style": "Organic shapes, Green gradients",
+        "content": "Static list of sustainable travel tips (Reusable bottle, Public transport, etc.)"
+      }
+    },
+    "data_logic": {
+      "local_storage": {
+        "key": "echo_trip_saved",
+        "action_save": "Serialize current itinerary state -> Save to LS",
+        "action_load": "Parse from LS -> Hydrate State"
+      },
+      "mock_algorithm": {
+        "description": "Logika untuk generate itinerary jika backend belum ready",
+        "rules": [
+          "Start day at 09:00",
+          "Lunch break at 12:00-13:00",
+          "Max 3 activities for Relaxed, 5 for Fast",
+          "Group places by proximity (mock logic)"
+        ]
+      }
+    }
+  }
