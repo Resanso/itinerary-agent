@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import ItineraryList from '@/components/itinerary/ItineraryList';
+import RecommendationPanel from '@/components/itinerary/RecommendationPanel';
+import ShareModal from '@/components/itinerary/ShareModal';
 import { Share2, Bookmark } from 'lucide-react';
 
 // Dynamic import untuk MapPlanner dengan SSR disabled
@@ -50,6 +52,8 @@ export default function ResultPage() {
   const [itineraryData, setItineraryData] = useState<ItineraryData | null>(null);
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [allPlaces, setAllPlaces] = useState<Place[]>([]);
+  const [isRecommendationOpen, setIsRecommendationOpen] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   useEffect(() => {
     // Ambil data dari sessionStorage
@@ -80,6 +84,96 @@ export default function ResultPage() {
     setSelectedPlaceId(placeId);
   };
 
+  const handleReorder = (dayNumber: number, fromIndex: number, toIndex: number) => {
+    if (!itineraryData) return;
+    
+    const updatedDays = [...itineraryData.days];
+    const dayIndex = updatedDays.findIndex(d => d.dayNumber === dayNumber);
+    if (dayIndex === -1) return;
+    
+    const day = { ...updatedDays[dayIndex] };
+    const places = [...day.places];
+    const [moved] = places.splice(fromIndex, 1);
+    places.splice(toIndex, 0, moved);
+    
+    day.places = places;
+    updatedDays[dayIndex] = day;
+    
+    const updatedData = { ...itineraryData, days: updatedDays };
+    setItineraryData(updatedData);
+    sessionStorage.setItem('itineraryData', JSON.stringify(updatedData));
+    
+    // Update allPlaces
+    const newAllPlaces: Place[] = [];
+    updatedDays.forEach((d) => {
+      newAllPlaces.push(...d.places);
+    });
+    setAllPlaces(newAllPlaces);
+  };
+
+  const handleRemove = (dayNumber: number, placeId: string) => {
+    if (!itineraryData) return;
+    
+    const updatedDays = [...itineraryData.days];
+    const dayIndex = updatedDays.findIndex(d => d.dayNumber === dayNumber);
+    if (dayIndex === -1) return;
+    
+    const day = { ...updatedDays[dayIndex] };
+    day.places = day.places.filter(p => p.id !== placeId);
+    
+    updatedDays[dayIndex] = day;
+    
+    const updatedData = { ...itineraryData, days: updatedDays };
+    setItineraryData(updatedData);
+    sessionStorage.setItem('itineraryData', JSON.stringify(updatedData));
+    
+    // Update allPlaces
+    const newAllPlaces: Place[] = [];
+    updatedDays.forEach((d) => {
+      newAllPlaces.push(...d.places);
+    });
+    setAllPlaces(newAllPlaces);
+    
+    // Clear selection if removed place was selected
+    if (selectedPlaceId === placeId) {
+      setSelectedPlaceId(null);
+    }
+  };
+
+  const handleAddToDay = (dayNumber: number, place: Place) => {
+    if (!itineraryData) return;
+    
+    const updatedDays = [...itineraryData.days];
+    const dayIndex = updatedDays.findIndex(d => d.dayNumber === dayNumber);
+    if (dayIndex === -1) return;
+    
+    const day = { ...updatedDays[dayIndex] };
+    // Add place with default time slot and duration
+    const newPlace: Place = {
+      ...place,
+      timeSlot: day.places.length > 0 
+        ? day.places[day.places.length - 1].timeSlot 
+        : '09:00',
+      duration: 120, // Default 2 hours
+    };
+    day.places = [...day.places, newPlace];
+    
+    updatedDays[dayIndex] = day;
+    
+    const updatedData = { ...itineraryData, days: updatedDays };
+    setItineraryData(updatedData);
+    sessionStorage.setItem('itineraryData', JSON.stringify(updatedData));
+    
+    // Update allPlaces
+    const newAllPlaces: Place[] = [];
+    updatedDays.forEach((d) => {
+      newAllPlaces.push(...d.places);
+    });
+    setAllPlaces(newAllPlaces);
+    
+    setIsRecommendationOpen(false);
+  };
+
   if (!itineraryData) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--color-background-main)' }}>
@@ -92,9 +186,9 @@ export default function ResultPage() {
 
   return (
     <main className="h-screen flex flex-col overflow-hidden" style={{ backgroundColor: 'var(--color-background-main)' }}>
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden pt-20">
         {/* Left Sidebar - Itinerary List (40%) */}
-        <div className="w-full md:w-[40%] flex-shrink-0 bg-background-card border-r overflow-hidden" style={{ borderColor: 'var(--color-secondary)' }}>
+        <div className="w-full md:w-[40%] flex-shrink-0 bg-background-card border-r overflow-hidden shadow-lg" style={{ borderColor: 'var(--color-secondary)' }}>
           <ItineraryList
             city={itineraryData.city}
             totalDays={itineraryData.totalDays}
@@ -102,6 +196,9 @@ export default function ResultPage() {
             days={itineraryData.days}
             selectedPlaceId={selectedPlaceId}
             onPlaceClick={handlePlaceClick}
+            onReorder={handleReorder}
+            onRemove={handleRemove}
+            onAddDestination={() => setIsRecommendationOpen(true)}
           />
         </div>
 
@@ -118,55 +215,24 @@ export default function ResultPage() {
         </div>
       </div>
 
-      {/* Mobile Map View (Full screen when map button clicked) */}
-      <div className="md:hidden fixed inset-0 z-50 bg-background-card" style={{ display: selectedPlaceId ? 'block' : 'none' }}>
-        <div className="h-full">
-          <div className="p-4 border-b flex items-center justify-between" style={{ borderColor: 'var(--color-secondary)' }}>
-            <h2 className="font-semibold font-heading" style={{ color: 'var(--color-text-primary)' }}>
-              Map View
-            </h2>
-            <button
-              onClick={() => setSelectedPlaceId(null)}
-              className="px-4 py-2 rounded-[var(--radius-button)] bg-primary text-white"
-            >
-              Close
-            </button>
-          </div>
-          <div className="h-[calc(100%-73px)]">
-            <ItineraryMap
-              mapCenter={itineraryData.mapCenter}
-              places={allPlaces}
-              selectedPlaceId={selectedPlaceId}
-              onPlaceClick={handlePlaceClick}
-            />
-          </div>
-        </div>
-      </div>
+      {/* Mobile Map View - Removed as we don't want full screen map on click */}
 
       {/* Bottom Bar - Share and Save */}
-      <div className="h-16 border-t flex items-center justify-between px-6 bg-background-card" style={{ borderColor: 'var(--color-secondary)' }}>
+      <div className="h-16 border-t flex items-center justify-center gap-4 px-6 bg-background-card shadow-lg" style={{ borderColor: 'var(--color-secondary)' }}>
         <button 
-          className="flex items-center gap-2 font-medium transition-colors hover:text-primary active:scale-95" 
+          className="flex items-center gap-2 px-6 py-2.5 rounded-full font-medium transition-all hover:bg-secondary active:scale-95 hover:shadow-md" 
           style={{ color: 'var(--color-text-primary)' }}
-          onClick={() => {
-            // Share functionality
-            if (navigator.share) {
-              navigator.share({
-                title: `${itineraryData.totalDays}-Day ${itineraryData.city} Eco-Adventure`,
-                text: `Check out my ${itineraryData.totalDays}-day sustainable travel itinerary for ${itineraryData.city}!`,
-              });
-            } else {
-              // Fallback: copy to clipboard
-              navigator.clipboard.writeText(`${itineraryData.totalDays}-Day ${itineraryData.city} Eco-Adventure`);
-            }
-          }}
+          onClick={() => setIsShareModalOpen(true)}
         >
           <Share2 className="w-5 h-5" />
-          <span>Share</span>
+          <span>Share Itinerary</span>
         </button>
         <button 
-          className="flex items-center gap-2 font-medium transition-colors hover:text-primary active:scale-95" 
-          style={{ color: 'var(--color-text-primary)' }}
+          className="flex items-center gap-2 px-6 py-2.5 rounded-full font-medium transition-all hover:bg-primary hover:text-white active:scale-95 hover:shadow-md" 
+          style={{ 
+            color: 'var(--color-primary)',
+            border: '2px solid var(--color-primary)',
+          }}
           onClick={() => {
             // Save functionality - save to localStorage
             const saved = localStorage.getItem('savedItineraries');
@@ -176,13 +242,36 @@ export default function ResultPage() {
               savedAt: new Date().toISOString(),
             });
             localStorage.setItem('savedItineraries', JSON.stringify(savedArray));
-            alert('Itinerary saved!');
+            alert('Itinerary saved successfully! ✨');
           }}
         >
           <Bookmark className="w-5 h-5" />
-          <span>Save</span>
+          <span>Save Itinerary</span>
         </button>
       </div>
+
+      {/* Recommendation Panel */}
+      {itineraryData && (
+        <RecommendationPanel
+          city={itineraryData.city}
+          isOpen={isRecommendationOpen}
+          onClose={() => setIsRecommendationOpen(false)}
+          onAddToDay={handleAddToDay}
+          totalDays={itineraryData.totalDays}
+        />
+      )}
+
+      {/* Share Modal */}
+      {itineraryData && (
+        <ShareModal
+          city={itineraryData.city}
+          totalDays={itineraryData.totalDays}
+          pace={itineraryData.pace}
+          days={itineraryData.days}
+          isOpen={isShareModalOpen}
+          onClose={() => setIsShareModalOpen(false)}
+        />
+      )}
     </main>
   );
 }

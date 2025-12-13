@@ -14,6 +14,16 @@ const generatePlanInput = z.object({
   ecoFocus: z.boolean().optional().default(false),
 });
 
+const getRecommendationsInput = z.object({
+  city: z.string().min(1, 'City is required'),
+  category: z.string().optional(),
+});
+
+const getPlaceDetailsInput = z.object({
+  placeName: z.string().min(1, 'Place name is required'),
+  city: z.string().min(1, 'City is required'),
+});
+
 // Type untuk response
 type Place = {
   id: string;
@@ -27,6 +37,18 @@ type Place = {
     lng: number;
   };
   thumbnail?: string;
+};
+
+// Type untuk recommendations (tanpa timeSlot dan duration)
+type RecommendationPlace = {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  coordinates: {
+    lat: number;
+    lng: number;
+  };
 };
 
 type Day = {
@@ -223,7 +245,8 @@ function generateMockItinerary(
 
 // Helper function untuk mendapatkan API key
 function getGeminiApiKey(): string {
-  const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+  // Use the provided API key or fallback to environment variable
+  const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || 'AIzaSyBynlIxSXWb9uqfx71_q4md9dJZDasOYlc';
   if (!apiKey) {
     throw new Error('NEXT_PUBLIC_GEMINI_API_KEY is not set in environment variables');
   }
@@ -340,7 +363,26 @@ Important:
         });
 
         // Extract text response
-        const responseText = result.response.text();
+        let responseText = '';
+        try {
+          // Try to access response text - different API versions may have different structures
+          if ((result as any).response?.text) {
+            responseText = (result as any).response.text();
+          } else if ((result as any).text) {
+            responseText = (result as any).text();
+          } else if (typeof (result as any).toString === 'function') {
+            responseText = (result as any).toString();
+          } else {
+            // Last resort: try to get text from candidates
+            const candidates = (result as any).candidates;
+            if (candidates && candidates[0]?.content?.parts) {
+              responseText = candidates[0].content.parts.map((p: any) => p.text).join('');
+            }
+          }
+        } catch (e) {
+          console.error('Error extracting text from response:', e);
+          throw new Error('Failed to extract response from Gemini API');
+        }
         
         // Parse JSON response
         const itinerary = parseGeminiResponse(responseText);
@@ -375,6 +417,331 @@ Important:
           input.pace,
           input.interests
         );
+      }
+    }),
+
+  getRecommendations: publicProcedure
+    .input(getRecommendationsInput)
+    .query(async ({ input }) => {
+      try {
+        const { city, category } = input;
+        
+        // Get city coordinates for validation
+        const cityCoordinates: Record<string, { lat: number; lng: number; province?: string }> = {
+          'Semarang': { lat: -7.0051, lng: 110.4381, province: 'Central Java' },
+          'Rembang': { lat: -6.7183, lng: 111.3486, province: 'Central Java' },
+          'Jakarta': { lat: -6.2088, lng: 106.8456, province: 'Jakarta' },
+          'Bandung': { lat: -6.9175, lng: 107.6191, province: 'West Java' },
+          'Yogyakarta': { lat: -7.7956, lng: 110.3695, province: 'Yogyakarta' },
+          'Surabaya': { lat: -7.2575, lng: 112.7521, province: 'East Java' },
+          'Bali': { lat: -8.3405, lng: 115.092, province: 'Bali' },
+          'Malang': { lat: -7.9797, lng: 112.6304, province: 'East Java' },
+          'Solo': { lat: -7.5755, lng: 110.8243, province: 'Central Java' },
+          'Medan': { lat: 3.5952, lng: 98.6722, province: 'North Sumatra' },
+          'Makassar': { lat: -5.1477, lng: 119.4327, province: 'South Sulawesi' },
+        };
+
+        // Get city info, if not found, try to get approximate coordinates from prompt
+        let cityInfo = cityCoordinates[city];
+        if (!cityInfo) {
+          // For unknown cities, use a default but make prompt more explicit
+          console.warn(`[getRecommendations] City "${city}" not in coordinates list, using default`);
+          cityInfo = { lat: -6.2088, lng: 106.8456, province: 'Indonesia' };
+        }
+        const latRange = { min: cityInfo.lat - 0.5, max: cityInfo.lat + 0.5 };
+        const lngRange = { min: cityInfo.lng - 0.5, max: cityInfo.lng + 0.5 };
+        
+        // Initialize Gemini AI
+        const apiKey = getGeminiApiKey();
+        const genAI = new GoogleGenAI({
+          vertexai: false,
+          apiKey: apiKey,
+        });
+
+        // Build prompt untuk mendapatkan rekomendasi tempat
+        const categoryFilter = category ? ` in the ${category} category` : '';
+        const provinceInfo = cityInfo.province ? `, ${cityInfo.province}` : '';
+        const isKnownCity = cityCoordinates[city] !== undefined;
+        
+        const prompt = `You are an expert travel guide specializing in ${city}${provinceInfo}, Indonesia. 
+
+CRITICAL REQUIREMENT: You MUST provide recommendations ONLY for places located in ${city}${provinceInfo}, Indonesia. 
+- DO NOT include places from Jakarta, Bandung, Yogyakarta, Semarang, or any other cities
+- ALL places must be specifically located in ${city}${provinceInfo}
+- ${isKnownCity ? '' : `IMPORTANT: ${city} is a real city in Indonesia. Provide real places that exist in ${city}.`}
+- If you don't know enough places in ${city}, you can include nearby places within ${city} city limits or regency only
+
+Provide a list of 8-12 real, actual tourist destinations and places in ${city}${provinceInfo}${categoryFilter}.
+
+Requirements:
+- ALL places MUST be located in ${city}${provinceInfo}, Indonesia
+- Return ONLY real, existing places that are actually in ${city}
+- DO NOT include places from other cities
+- Include popular and well-known destinations in ${city}
+- If category is specified (${category || 'any'}), prioritize places matching that category
+- Each place must have accurate coordinates (latitude and longitude) specifically for ${city}
+- Coordinates for ${city} should be around latitude ${cityInfo.lat.toFixed(4)} (range: ${latRange.min.toFixed(2)} to ${latRange.max.toFixed(2)}) and longitude ${cityInfo.lng.toFixed(4)} (range: ${lngRange.min.toFixed(2)} to ${lngRange.max.toFixed(2)})
+- Provide realistic descriptions (2-3 sentences)
+
+Return ONLY a valid JSON array with this exact structure (no markdown, no explanations, just JSON):
+[
+  {
+    "id": "unique-id-1",
+    "name": "Real Place Name in ${city}",
+    "description": "Brief description of the place in ${city} (2-3 sentences)",
+    "category": "${category || 'Nature'}",
+    "coordinates": {
+      "lat": <realistic latitude for ${city}, around ${cityInfo.lat.toFixed(4)}>,
+      "lng": <realistic longitude for ${city}, around ${cityInfo.lng.toFixed(4)}>
+    }
+  }
+]
+
+Generate 8-12 recommendations. CRITICAL: Ensure ALL place names are REAL and exist specifically in ${city}${provinceInfo}, Indonesia. Do NOT include places from Jakarta or any other city.`;
+
+        // Generate content dengan Gemini
+        const result = await genAI.models.generateContent({
+          model: 'gemini-1.5-flash',
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          config: {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 2048,
+          },
+        });
+
+        // Extract text response - use same method as generatePlan
+        let responseText = '';
+        try {
+          // Try to access response text - different API versions may have different structures
+          if ((result as any).response?.text) {
+            responseText = (result as any).response.text();
+          } else if ((result as any).text) {
+            responseText = (result as any).text();
+          } else if (typeof (result as any).toString === 'function') {
+            responseText = (result as any).toString();
+          } else {
+            // Last resort: try to get text from candidates
+            const candidates = (result as any).candidates;
+            if (candidates && candidates[0]?.content?.parts) {
+              responseText = candidates[0].content.parts.map((p: any) => p.text).join('');
+            }
+          }
+          
+          console.log('[getRecommendations] Raw response text length:', responseText.length);
+          console.log('[getRecommendations] Raw response preview:', responseText.substring(0, 200));
+        } catch (e) {
+          console.error('[getRecommendations] Error extracting text from response:', e);
+          console.error('[getRecommendations] Result structure:', JSON.stringify(result, null, 2).substring(0, 500));
+          throw new Error('Failed to extract response from Gemini API');
+        }
+        
+        if (!responseText || responseText.trim().length === 0) {
+          console.error('[getRecommendations] Empty response text');
+          throw new Error('Empty response from Gemini API');
+        }
+        
+        // Parse JSON response
+        let recommendations: RecommendationPlace[] = [];
+        try {
+          let jsonText = responseText.trim();
+          
+          // Remove markdown code blocks jika ada
+          if (jsonText.startsWith('```json')) {
+            jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+          } else if (jsonText.startsWith('```')) {
+            jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+          }
+          
+          const parsed = JSON.parse(jsonText);
+          const rawRecommendations = Array.isArray(parsed) ? parsed : [parsed];
+          
+          console.log('[getRecommendations] Parsed recommendations count:', rawRecommendations.length);
+          
+          // Ensure all places have IDs and proper structure
+          // Make coordinate validation more lenient (0.5 degree range instead of 0.2)
+          const cityInfo = cityCoordinates[city] || { lat: -6.2088, lng: 106.8456 };
+          const latRange = { min: cityInfo.lat - 0.5, max: cityInfo.lat + 0.5 };
+          const lngRange = { min: cityInfo.lng - 0.5, max: cityInfo.lng + 0.5 };
+          
+          recommendations = rawRecommendations
+            .map((place: any, index: number): RecommendationPlace => {
+              const lat = place.coordinates?.lat || cityInfo.lat;
+              const lng = place.coordinates?.lng || cityInfo.lng;
+              
+              return {
+                id: place.id || `rec-${Date.now()}-${index}`,
+                name: place.name || 'Unknown Place',
+                description: place.description || 'No description available',
+                category: place.category || category || 'Nature',
+                coordinates: {
+                  lat: lat,
+                  lng: lng,
+                },
+              };
+            })
+            // Filter out places with coordinates that are too far from the city (more lenient)
+            .filter((place: RecommendationPlace) => {
+              const lat = place.coordinates.lat;
+              const lng = place.coordinates.lng;
+              // More lenient validation - allow 0.5 degree range (about 55km)
+              const isValid = lat >= latRange.min && lat <= latRange.max && 
+                             lng >= lngRange.min && lng <= lngRange.max;
+              
+              if (!isValid) {
+                console.warn(`[getRecommendations] Filtered out place "${place.name}" - coordinates (${lat}, ${lng}) outside range for ${city}`);
+              }
+              
+              return isValid;
+            });
+          
+          console.log('[getRecommendations] Final recommendations count after filtering:', recommendations.length);
+          
+          // If all recommendations were filtered out, use the raw ones anyway (with city center coordinates)
+          if (recommendations.length === 0 && rawRecommendations.length > 0) {
+            console.warn('[getRecommendations] All recommendations filtered out, using raw data with city center coordinates');
+            recommendations = rawRecommendations.map((place: any, index: number): RecommendationPlace => ({
+              id: place.id || `rec-${Date.now()}-${index}`,
+              name: place.name || 'Unknown Place',
+              description: place.description || 'No description available',
+              category: place.category || category || 'Nature',
+              coordinates: {
+                lat: place.coordinates?.lat || cityInfo.lat,
+                lng: place.coordinates?.lng || cityInfo.lng,
+              },
+            }));
+          }
+        } catch (parseError: any) {
+          console.error('[getRecommendations] Error parsing recommendations:', parseError);
+          console.error('[getRecommendations] Response text:', responseText);
+          throw new Error(`Failed to parse AI-generated recommendations: ${parseError.message}`);
+        }
+
+        if (recommendations.length === 0) {
+          console.warn(`[getRecommendations] No recommendations found for ${city}${category ? ` (${category})` : ''}`);
+        }
+
+        return recommendations;
+      } catch (error: any) {
+        console.error('[getRecommendations] Gemini API error:', error);
+        console.error('[getRecommendations] Error stack:', error.stack);
+        // Return empty array on error instead of throwing
+        return [];
+      }
+    }),
+
+  getPlaceDetails: publicProcedure
+    .input(getPlaceDetailsInput)
+    .query(async ({ input }) => {
+      try {
+        const { placeName, city } = input;
+        
+        // Initialize Gemini AI
+        const apiKey = getGeminiApiKey();
+        const genAI = new GoogleGenAI({
+          vertexai: false,
+          apiKey: apiKey,
+        });
+
+        const prompt = `You are a local travel expert for ${city}, Indonesia. Provide detailed etiquette and visitor information for "${placeName}" in ${city}.
+
+Requirements:
+- Provide specific do's and don'ts for visiting this place
+- Include warnings or important information visitors should know
+- Be specific to this location, not generic travel advice
+- Include cultural, religious, or environmental considerations
+- Keep each point concise (1 sentence)
+
+Return ONLY a valid JSON object with this exact structure (no markdown, no explanations):
+{
+  "placeName": "${placeName}",
+  "city": "${city}",
+  "description": "Brief 2-3 sentence description of the place",
+  "dos": [
+    "Specific thing visitors should do at this place",
+    "Another specific do",
+    "One more specific do"
+  ],
+  "donts": [
+    "Specific thing visitors should NOT do at this place",
+    "Another specific don't",
+    "One more specific don't"
+  ],
+  "warnings": [
+    "Important warning or information about visiting hours, admission, etc."
+  ]
+}
+
+Provide accurate, helpful information specific to ${placeName} in ${city}.`;
+
+        const result = await genAI.models.generateContent({
+          model: 'gemini-1.5-flash',
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          config: {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 1024,
+          },
+        });
+
+        // Extract text response
+        let responseText = '';
+        try {
+          if ((result as any).response?.text) {
+            responseText = (result as any).response.text();
+          } else if ((result as any).text) {
+            responseText = (result as any).text();
+          } else {
+            const candidates = (result as any).candidates;
+            if (candidates && candidates[0]?.content?.parts) {
+              responseText = candidates[0].content.parts.map((p: any) => p.text).join('');
+            }
+          }
+        } catch (e) {
+          console.error('[getPlaceDetails] Error extracting text:', e);
+          throw new Error('Failed to extract response from Gemini API');
+        }
+
+        // Parse JSON response
+        let jsonText = responseText.trim();
+        if (jsonText.startsWith('```json')) {
+          jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        } else if (jsonText.startsWith('```')) {
+          jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+        }
+
+        const details = JSON.parse(jsonText);
+        return {
+          placeName: details.placeName || placeName,
+          city: details.city || city,
+          description: details.description || '',
+          dos: details.dos || [],
+          donts: details.donts || [],
+          warnings: details.warnings || [],
+        };
+      } catch (error: any) {
+        console.error('[getPlaceDetails] Error:', error);
+        // Return default structure on error
+        return {
+          placeName: input.placeName,
+          city: input.city,
+          description: 'A wonderful destination to explore.',
+          dos: [
+            'Respect local customs and traditions',
+            'Stay on designated paths',
+            'Take all your trash with you',
+          ],
+          donts: [
+            'Do not disturb other visitors',
+            'Do not damage property or nature',
+            'Do not litter',
+          ],
+          warnings: [
+            'Check opening hours before visiting. Some facilities may close earlier than expected.',
+          ],
+        };
       }
     }),
 });

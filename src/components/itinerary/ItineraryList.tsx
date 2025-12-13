@@ -3,7 +3,24 @@
 import { useState } from 'react';
 import { Card, Button } from '@/components/ui';
 import { cn } from '@/utils/cn';
-import { Plus, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { Plus, CheckCircle, XCircle, AlertTriangle, Trash2, GripVertical } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface Place {
   id: string;
@@ -31,7 +48,12 @@ interface ItineraryListProps {
   days: Day[];
   selectedPlaceId?: string | null;
   onPlaceClick?: (placeId: string) => void;
+  onReorder?: (dayNumber: number, fromIndex: number, toIndex: number) => void;
+  onRemove?: (dayNumber: number, placeId: string) => void;
+  onAddDestination?: () => void;
 }
+
+import SortablePlace from './SortablePlace';
 
 export default function ItineraryList({
   city,
@@ -40,8 +62,23 @@ export default function ItineraryList({
   days,
   selectedPlaceId,
   onPlaceClick,
+  onReorder,
+  onRemove,
+  onAddDestination,
 }: ItineraryListProps) {
   const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set([1])); // Default expand day 1
+  const [expandedPlaces, setExpandedPlaces] = useState<Set<string>>(new Set()); // Track expanded places
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // 8px movement required before drag starts
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   const toggleDay = (dayNumber: number) => {
     setExpandedDays((prev) => {
@@ -55,24 +92,49 @@ export default function ItineraryList({
     });
   };
 
-  const getCategoryIcon = (category: string) => {
-    const icons: Record<string, string> = {
-      Nature: '🌿',
-      Culinary: '🍽️',
-      Culture: '🏛️',
-      History: '📜',
-      'Hidden Gem': '💎',
-    };
-    return icons[category] || '📍';
+  const togglePlace = (placeId: string) => {
+    setExpandedPlaces((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(placeId)) {
+        newSet.delete(placeId);
+      } else {
+        newSet.add(placeId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleDragEnd = (event: DragEndEvent, dayNumber: number) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id && onReorder) {
+      const day = days.find(d => d.dayNumber === dayNumber);
+      if (!day) return;
+
+      const oldIndex = day.places.findIndex(p => p.id === active.id);
+      const newIndex = day.places.findIndex(p => p.id === over.id);
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        onReorder(dayNumber, oldIndex, newIndex);
+      }
+    }
   };
 
   return (
     <div className="h-full flex flex-col">
       {/* Header - Trip Summary */}
-      <div className="p-6 border-b" style={{ borderColor: 'var(--color-secondary)' }}>
-        <h1 className="text-2xl sm:text-3xl font-bold mb-2 font-heading" style={{ color: 'var(--color-text-primary)' }}>
+      <div className="p-6 border-b bg-gradient-to-r from-secondary/30 to-transparent" style={{ borderColor: 'var(--color-secondary)' }}>
+        <h1 className="text-2xl sm:text-3xl font-bold mb-2 font-heading tracking-tight" style={{ color: 'var(--color-text-primary)' }}>
           {totalDays}-Day {city} Eco-Adventure
         </h1>
+        <div className="flex items-center gap-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--color-primary)' }}></span>
+            {pace} pace
+          </span>
+          <span>•</span>
+          <span>{days.reduce((sum, day) => sum + day.places.length, 0)} destinations</span>
+        </div>
       </div>
 
       {/* Days Accordion */}
@@ -84,22 +146,32 @@ export default function ItineraryList({
               {/* Day Header */}
               <button
                 onClick={() => toggleDay(day.dayNumber)}
-                className="w-full p-4 flex items-center justify-between hover:bg-secondary transition-colors"
+                className="w-full p-5 flex items-center justify-between hover:bg-secondary/50 transition-all group"
               >
-                <div>
-                  <h2 className="text-lg font-semibold font-heading" style={{ color: 'var(--color-text-primary)' }}>
-                    Day {day.dayNumber}: {day.places[0]?.name ? `${day.places[0].name.split(' ')[0]} Arrival` : `Day ${day.dayNumber}`}
-                  </h2>
-                  <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>
-                    {day.places.length} {day.places.length === 1 ? 'activity' : 'activities'} planned
-                  </p>
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white" style={{ backgroundColor: 'var(--color-primary)' }}>
+                    {day.dayNumber}
+                  </div>
+                  <div className="text-left">
+                    <h2 className="text-lg font-bold font-heading group-hover:text-primary transition-colors" style={{ color: 'var(--color-text-primary)' }}>
+                      Day {day.dayNumber}
+                    </h2>
+                    <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>
+                      {day.places.length} {day.places.length === 1 ? 'activity' : 'activities'} planned
+                    </p>
+                  </div>
                 </div>
-                <span className="text-xl">
-                  {isExpanded ? '▼' : '▶'}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium px-3 py-1 rounded-full" style={{ backgroundColor: 'var(--color-secondary)', color: 'var(--color-primary)' }}>
+                    {isExpanded ? 'Collapse' : 'Expand'}
+                  </span>
+                  <span className="text-xl transition-transform duration-200" style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+                    ▶
+                  </span>
+                </div>
               </button>
 
-              {/* Day Content */}
+              {/* Day Content with Drag & Drop */}
               {isExpanded && (
                 <div className="px-4 pb-4 space-y-3 relative">
                   {/* Timeline Vertical Line - Connects all places */}
@@ -108,101 +180,42 @@ export default function ItineraryList({
                     style={{ backgroundColor: 'var(--color-secondary)' }}
                   />
                   
-                  {day.places.map((place, placeIndex) => {
-                    const isSelected = selectedPlaceId === place.id;
-                    const isLast = placeIndex === day.places.length - 1;
-                    return (
-                      <div key={place.id} className="space-y-3 relative">
-                        {/* Timeline Dot */}
-                        <div 
-                          className="absolute left-[30px] top-6 w-3 h-3 rounded-full border-2 z-10"
-                          style={{ 
-                            backgroundColor: isSelected ? 'var(--color-primary)' : 'var(--color-background-card)',
-                            borderColor: isSelected ? 'var(--color-primary)' : 'var(--color-secondary)',
-                            transform: 'translateX(-50%)',
-                          }}
-                        />
-                        
-                        <Card
-                          variant={isSelected ? 'active' : 'default'}
-                          padding="md"
-                          className={cn(
-                            'cursor-pointer hover-lift transition-all rounded-xl shadow-sm ml-8',
-                            isSelected && 'ring-2 ring-primary'
-                          )}
-                          onClick={() => {
-                            if (onPlaceClick) {
-                              onPlaceClick(place.id);
-                            }
-                          }}
-                        >
-                          <div className="flex items-start gap-3">
-                            {/* Category Icon */}
-                            <div className="text-2xl flex-shrink-0">
-                              {getCategoryIcon(place.category)}
-                            </div>
-
-                            {/* Place Info */}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between mb-1">
-                                <h3 className="font-semibold font-heading" style={{ color: 'var(--color-text-primary)' }}>
-                                  {place.name}
-                                </h3>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                                    ▼
-                                  </span>
-                                  <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                                    ⋮
-                                  </span>
-                                </div>
-                              </div>
-                              <p className="text-sm mb-2" style={{ color: 'var(--color-text-secondary)' }}>
-                                {place.category}, {place.duration / 60} {place.duration >= 60 ? 'hours' : 'minute'}{place.duration >= 120 ? 's' : ''}
-                              </p>
-                            </div>
-                          </div>
-                        </Card>
-
-                        {/* Etiquette Cards (Show for first place as example) */}
-                        {placeIndex === 0 && isExpanded && (
-                          <div className="space-y-3 ml-8 relative">
-                            <div className="p-4 rounded-xl shadow-sm" style={{ backgroundColor: '#F0FDF4' }}>
-                              <div className="flex items-start gap-3 mb-3">
-                                <CheckCircle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: '#166534' }} />
-                                <h4 className="font-bold text-sm font-heading" style={{ color: '#166534' }}>Do</h4>
-                              </div>
-                              <ul className="space-y-1.5 text-sm ml-8" style={{ color: '#15803D' }}>
-                                <li>• Keep your voice down.</li>
-                                <li>• Stay on designated paths.</li>
-                                <li>• Take all your trash with you.</li>
-                              </ul>
-                            </div>
-                            <div className="p-4 rounded-xl shadow-sm relative" style={{ backgroundColor: '#FEF2F2' }}>
-                              <div className="flex items-start gap-3 mb-3">
-                                <XCircle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: '#991B1B' }} />
-                                <h4 className="font-bold text-sm font-heading" style={{ color: '#991B1B' }}>Don't</h4>
-                              </div>
-                              <ul className="space-y-1.5 text-sm ml-8" style={{ color: '#DC2626' }}>
-                                <li>• Do not bring alcohol.</li>
-                                <li>• Do not use sports equipment.</li>
-                                <li>• Do not feed the wildlife.</li>
-                              </ul>
-                            </div>
-                            <div className="p-4 rounded-xl shadow-sm relative" style={{ backgroundColor: 'var(--color-accent-warning)' }}>
-                              <div className="flex items-start gap-3 mb-3">
-                                <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: '#F59E0B' }} />
-                                <h4 className="font-bold text-sm font-heading" style={{ color: '#F59E0B' }}>Warning</h4>
-                              </div>
-                              <p className="text-sm ml-8 leading-relaxed" style={{ color: '#D97706' }}>
-                                Last admission is 30 minutes before closing. Greenhouses close 30 mins before garden.
-                              </p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={(event) => handleDragEnd(event, day.dayNumber)}
+                  >
+                    <SortableContext
+                      items={day.places.map(p => p.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {day.places.map((place) => {
+                        const isSelected = selectedPlaceId === place.id;
+                        const isExpandedPlace = expandedPlaces.has(place.id);
+                        return (
+                          <SortablePlace
+                            key={place.id}
+                            place={place}
+                            isSelected={isSelected}
+                            isExpanded={isExpandedPlace}
+                            dayNumber={day.dayNumber}
+                            city={city}
+                            onToggle={() => togglePlace(place.id)}
+                            onRemove={() => {
+                              if (onRemove && confirm(`Remove ${place.name} from Day ${day.dayNumber}?`)) {
+                                onRemove(day.dayNumber, place.id);
+                              }
+                            }}
+                            onPlaceClick={() => {
+                              if (onPlaceClick && typeof window !== 'undefined' && window.innerWidth >= 768) {
+                                onPlaceClick(place.id);
+                              }
+                            }}
+                          />
+                        );
+                      })}
+                    </SortableContext>
+                  </DndContext>
                 </div>
               )}
             </div>
@@ -211,8 +224,13 @@ export default function ItineraryList({
       </div>
 
       {/* Add Destination Button */}
-      <div className="p-4 border-t" style={{ borderColor: 'var(--color-secondary)' }}>
-        <Button variant="primary" fullWidth className="flex items-center justify-center gap-2">
+      <div className="p-6 border-t bg-gradient-to-t from-secondary/20 to-transparent" style={{ borderColor: 'var(--color-secondary)' }}>
+        <Button 
+          variant="primary" 
+          fullWidth 
+          className="flex items-center justify-center gap-2 rounded-full h-12 font-semibold text-base shadow-soft-primary hover:shadow-glow"
+          onClick={onAddDestination}
+        >
           <Plus className="w-5 h-5" />
           Add Destination
         </Button>

@@ -46,6 +46,7 @@ const navItems = [
   { label: 'Create', path: '/create' },
   { label: 'Tips', path: '/tips' },
   { label: 'Etiquette', path: '/etiquette' },
+  { label: 'Saved', path: '/saved' },
 ];
 
 export default function Navbar() {
