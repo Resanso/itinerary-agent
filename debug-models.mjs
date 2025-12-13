@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 
 // Load env vars manually since we are running a standalone script
-const envLocalPath = path.resolve(process.cwd(), '.env.local');
+const envLocalPath = path.resolve(process.cwd(), '.env');
 if (fs.existsSync(envLocalPath)) {
   const envConfig = dotenv.parse(fs.readFileSync(envLocalPath));
   for (const k in envConfig) {

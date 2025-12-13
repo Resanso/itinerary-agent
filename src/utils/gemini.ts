@@ -60,61 +60,76 @@ export class GeminiClientManager {
 
   public async generateContentStreamWithRetry(
     modelName: string,
-    params: any,
-    retryCount = 0
+    params: any
   ): Promise<any> {
-    const maxRetries = this.keys.length; // Try each key once
-    
-    // We try with the current key first (or the next one if we are retrying)
-    // Actually, for the *first* attempt we might want to just use the current one.
-    // If it fails, we rotate.
-    
-    // Let's implement a loop instead of recursion to be cleaner with the key rotation
-    let lastError;
-
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      const apiKey = this.keys[this.currentKeyIndex]; // Use current key
-      
-      try {
-        const ai = new GoogleGenAI({
-          vertexai: false,
-          apiKey: apiKey,
-        });
-
-        // Create the stream
-        const response = await ai.models.generateContentStream({
-            model: modelName,
-            ...params
-        });
-        
-        // If successful, we return the response. 
-        // Note: The stream itself might fail mid-way, but usually 429 happens at connection.
-        return response;
-
-      } catch (error: any) {
-        lastError = error;
-        
-        // Check if it's a rate limit error (429) or potentially 503 (overloaded)
-        const isRateLimit = 
-            error.message?.includes('429') || 
-            error.status === 429 ||
-            error.code === 429 ||
-            error.message?.includes('Quota exceeded') ||
-            error.message?.includes('Resource has been exhausted');
-
-        if (isRateLimit) {
-            console.warn(`Gemini API Rate Limit hit on key ending in ...${apiKey.slice(-4)}. Rotating key...`);
-            // Rotate to next key for the next attempt
-            this.currentKeyIndex = (this.currentKeyIndex + 1) % this.keys.length;
-            continue; // Try again with new key
-        }
-
-        // If it's another error (e.g. 400 Bad Request), we probably shouldn't retry blindly
-        throw error;
-      }
+    const modelsToTry = [modelName];
+    // If the requested model is 2.0-flash, add valid fallbacks from the available list
+    if (modelName === 'gemini-2.0-flash') {
+        modelsToTry.push('gemini-2.0-flash-lite');
+        modelsToTry.push('gemini-2.5-flash');
     }
 
-    throw new Error(`All API keys exhausted. Last error: ${lastError?.message}`);
+    let globalLastError;
+
+    // Outer loop: iterate through models (primary -> fallback)
+    for (const currentModel of modelsToTry) {
+        const maxRetries = this.keys.length; // Try each key once for the current model
+        let lastErrorForModel;
+
+        // Inner loop: iterate through API keys
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+            const apiKey = this.keys[this.currentKeyIndex]; // Use current key
+
+            try {
+                const ai = new GoogleGenAI({
+                    vertexai: false,
+                    apiKey: apiKey,
+                });
+
+                // Create the stream
+                const response = await ai.models.generateContentStream({
+                    model: currentModel,
+                    ...params
+                });
+
+                // If successful (and we are on a fallback), log it
+                if (currentModel !== modelName) {
+                    console.info(`Successfully generated content using fallback model: ${currentModel}`);
+                }
+                
+                return response;
+
+            } catch (error: any) {
+                lastErrorForModel = error;
+                globalLastError = error;
+
+                // Check if it's a rate limit error (429) or potentially 503 (overloaded)
+                const isRateLimit =
+                    error.message?.includes('429') ||
+                    error.status === 429 ||
+                    error.code === 429 ||
+                    error.message?.includes('Quota exceeded') ||
+                    error.message?.includes('Resource has been exhausted');
+
+                if (isRateLimit) {
+                    console.warn(`[${currentModel}] Rate Limit hit on key ending in ...${apiKey.slice(-4)}. Rotating key...`);
+                    // Rotate to next key for the next attempt
+                    this.currentKeyIndex = (this.currentKeyIndex + 1) % this.keys.length;
+                    continue; // Try again with new key
+                }
+
+                // If it's another error (e.g. 400 Bad Request), we probably shouldn't retry blindly,
+                // BUT if it's a model-specific 404 or 400 (e.g. model not found or params not supported), 
+                // we might want to let the outer loop try the fallback? 
+                // For safety, let's only strictly retry on Rate Limits or Server Errors for now.
+                throw error;
+            }
+        }
+        
+        console.warn(`All keys exhausted for model ${currentModel}. Checking for fallback model...`);
+    }
+
+    throw new Error(`All API keys and fallback models exhausted. Last error: ${globalLastError?.message}`);
   }
 }
 
