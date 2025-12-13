@@ -140,7 +140,7 @@ export default function ResultPage() {
     }
   };
 
-  const handleAddToDay = (dayNumber: number, place: Place) => {
+  const handleAddToDay = (dayNumber: number, place: Omit<Place, 'timeSlot' | 'duration'>) => {
     if (!itineraryData) return;
     
     const updatedDays = [...itineraryData.days];

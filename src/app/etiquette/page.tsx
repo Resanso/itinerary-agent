@@ -123,7 +123,9 @@ const defaultEtiquette: EtiquetteItem[] = [
   },
 ];
 
-export default function EtiquettePage() {
+import { Suspense } from 'react';
+
+function EtiquetteContent() {
   const searchParams = useSearchParams();
   const city = searchParams.get('city') || '';
 
@@ -228,6 +230,14 @@ export default function EtiquettePage() {
         )}
       </Container>
     </main>
+  );
+}
+
+export default function EtiquettePage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <EtiquetteContent />
+    </Suspense>
   );
 }
 
