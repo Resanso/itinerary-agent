@@ -51,7 +51,7 @@ export default function FeaturesGrid() {
       <Container maxWidth="xl" padding="md">
         <div className="text-center mb-16">
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-6 font-heading" style={{ color: 'var(--color-text-primary)' }}>
-            Smart Planning for a Greener Planet
+            Smart Planning for a Greener Planner
           </h2>
           <p className="text-base sm:text-lg max-w-3xl mx-auto leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
             Our platform provides you with the best tools to plan your travel in a way that's both enjoyable and environmentally friendly. Discover sustainable destinations, eco-certified accommodations, and responsible travel practices that help preserve our planet for future generations.
