@@ -82,7 +82,7 @@ export default function Navbar() {
             <Link href="/" className="flex items-center gap-2.5" onClick={closeMobileMenu}>
               <LogoIcon />
               <span className="text-xl font-bold font-heading tracking-tight" style={{ color: 'var(--color-primary)' }}>
-                Itinerary Agent
+                WisataYok.id
               </span>
             </Link>
 
