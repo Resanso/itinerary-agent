@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Poppins, Inter } from "next/font/google";
 import "./globals.css";
 import { TRPCProvider } from "@/components/providers/TRPCProvider";
@@ -21,6 +21,10 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Itinerary Agent - Sustainable Travel Planner",
   description: "Platform perencanaan perjalanan cerdas yang berfokus pada pariwisata berkelanjutan (sustainable travel).",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({
